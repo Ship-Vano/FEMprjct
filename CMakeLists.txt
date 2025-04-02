@@ -11,6 +11,14 @@ include_directories(${CMAKE_SOURCE_DIR}/src/geometry)
 # Find OpenMP
 find_package(OpenMP REQUIRED)
 
+
+
+add_executable(FEMprjct
+        src/fem/FEMSolver2D.cpp
+        src/geometry/NetGeometry.cpp
+        src/fem/solver.cpp
+        src/include/json/jsoncpp.cpp)
+
 #  Geometry executable
 add_executable(Geometry
         src/geometry/worldGen.cpp
@@ -24,9 +32,3 @@ else()
 endif()
 target_compile_options(Geometry PRIVATE -fopenmp)
 target_link_libraries(Geometry PRIVATE -fopenmp)
-
-
-add_executable(FEMprjct main.cpp
-        src/fem/FEMSolver2D.cpp
-        src/geometry/NetGeometry.cpp
-        src/fem/solver.cpp)

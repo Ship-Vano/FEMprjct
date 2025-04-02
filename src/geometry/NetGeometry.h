@@ -133,6 +133,7 @@ public:
 // Problem's World
 class World {
 private:
+    bool generateGhosts; // Флаг для генерации ghost элементов
     NodePool np; // набор узлов
     ElementPool ep; // набор элементов
     EdgePool edgp; // набор рёбер
@@ -156,13 +157,17 @@ public:
     std::vector<int> boundaryBottomNodes; // индексы нижних граничных узлов
     std::vector<int> boundaryBottomElems; // индексы нижних граничных элементов
     std::vector<int> boundaryBottomEdges; // индексы нижних граничных рёбер
+    const std::vector<int>& getBoundaryLeftNodes() const { return boundaryLeftNodes; }
+    const std::vector<int>& getBoundaryRightNodes() const { return boundaryRightNodes; }
+    const std::vector<int>& getBoundaryTopNodes() const { return boundaryTopNodes; }
+    const std::vector<int>& getBoundaryBottomNodes() const { return boundaryBottomNodes; }
     void setNodePool(const NodePool& np);
     NodePool getNodePool() const;
     void setElementPool(const ElementPool& ep);
     ElementPool getElementPool() const;
     EdgePool getEdgePool() const;
     void setEdgePool(const EdgePool& edgp);
-    World(const std::string &fileName, const bool isRenderedBin);
+    World(const std::string &fileName, const bool isRenderedBin, bool generateGhosts = false);
     void display() const;
     NeighbourService& getNeighbourService();
     void exportToFile(const std::string& filename) const; // экспорт в бинарный файл

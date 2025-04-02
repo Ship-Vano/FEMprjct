@@ -35,9 +35,11 @@ int main() {
     std::string dataFileName = json_root.get("fileName", "").asString();
     std::cout << "fileName is " << dataFileName << std::endl;
     omp_set_num_threads(omp_get_max_threads());
-    World world(dataFileName, false);
+    bool generateGhosts = json_root.get("generateGhosts", false).asBool();
+    World world(dataFileName, generateGhosts);
     std::cout << "World has been generated successfully!" << std::endl;
     std::cout << "[INFO]: NNodes = " << world.getNodePool().nodeCount << ", NElems = " << world.getElementPool().elCount << std::endl;
+    std::cout << "Corners: minX = " << world.minX << " , maxX = " << world.maxX << " , minY = " << world.minY << " , maxY = " << world.maxY << std::endl;
 
     for (const auto &elem: world.getElementPool().elements) {
         if (elem.edgeIndexes.empty()) {

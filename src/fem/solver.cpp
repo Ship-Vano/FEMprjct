@@ -5,9 +5,7 @@
 #include "FEMSolver2D.h"
 #include "json/json.h"
 
-int main(){
-
-    //TODO: move it to the global config file
+int main() {
     std::string configPath = "InputData/solverConfig.json";
     std::ifstream in(configPath, std::ios::in);
 
@@ -16,32 +14,52 @@ int main(){
     bool read_succeeded = json_reader.parse(in, json_root);
     assert(read_succeeded);
 
-    std::string importFileName = json_root.get("importFileName", "").asString();
-    std::cout << "Generating the world from " << importFileName << " file by reading it..." << std::endl;
-    bool generatedMesh = json_root.get("generatedMesh", false).asBool();
+    std::string meshBinFileName = json_root.get("importFileName", "").asString();
 
-    World world = World(importFileName, true);
-    if(!generatedMesh) {
-        world = World("InputData/mesh.txt", false);
-    }
+    // Создание и загрузка сетки
+    World world(meshBinFileName, true);
+    std::cout << "Corners: minX = " << world.minX << " , maxX = " << world.maxX << " , minY = " << world.minY << " , maxY = " << world.maxY << std::endl;
+    std::cout << "Loaded boundaries: "
+              << world.getBoundaryLeftNodes().size() << " left, "
+              << world.getBoundaryRightNodes().size() << " right, "
+              << world.getBoundaryTopNodes().size() << " top, "
+              << world.getBoundaryBottomNodes().size() << " bottom nodes\n";
 
-    std::cout << "MINlen = "<< world.getEdgePool().minEdgeLen << std::endl;
-    int taskType = json_root.get("taskType", 1).asInt();
-    double finalTime = json_root.get("finalTime", 0.1).asDouble();
-    int iterationsPerFrame = json_root.get("iterationsPerFrame", 10).asInt();
-    // world.display();
-    //std::cin.get();
-    omp_set_num_threads(omp_get_max_threads());
+    // Инициализация решателя
     FEMSolver2D solver(world);
-    solver.task_type = taskType;
-    solver.finalTime = finalTime;
-    solver.iterationsPerFrame = iterationsPerFrame;
-    solver.runSolver();
-    std::cout << "solver complete" << std::endl;
 
-    std::string exportFileName = json_root.get("exportFileName", "OutputData/unnamed_res.vtu").asString();
-    std::cout << "Writing vtu output to " << exportFileName << std::endl;
-    solver.writeVTU(exportFileName);
+    // Установка параметров задачи (пример)
+    solver.setParameters(
+            [](double x, double y){ return 1.0; },           // λ
+            [](double x, double y){ return 0.0; },           // Источник
+            [](double x, double y){ return x*x - y*y + 2; } // Условие Дирихле
+    );
+
+    // Решение задачи
+    solver.solve();
+
+    // Экспорт результатов
+    solver.exportToVTU("solution.vtu");
 
     return 0;
 }
+
+
+/**
+ * orbtvcfgdfg()
+ * frifrfrfewfdsf()
+ * hello there
+ * how are you
+ * gfh ghbdtn dfsr
+ * fds3 как  еоаывафывццловссчяя
+ * куываааавв
+ * frfsdzcxff
+ * fefm ds orint( fgdf )
+ * hello wirkd ()  if toy for (int i =0; i < n; ++ i){
+ * for i in range(3):
+ *     input()
+ *     ff()
+ *     cxz()
+ *     zxc()
+ *     sdfqwe = print_f_v_cdv() + 2
+ */

@@ -406,7 +406,7 @@ NeighbourService& World::getNeighbourService() {
     return ns;
 }
 
-World::World(const std::string &fileName, const bool isRenderedBin) : np(), ep(), edgp(), ns(np, ep, edgp) {
+World::World(const std::string &fileName, const bool isRenderedBin, bool generateGhosts) : np(), ep(), edgp(), ns(np, ep, edgp), generateGhosts(generateGhosts),ghostElemCount(0), ghostNodeCount(0)  {
 
     // Готовый пререндеренный мир (всё посчитано и записано в bin-файле)
     if(isRenderedBin) {
@@ -623,101 +623,108 @@ World::World(const std::string &fileName, const bool isRenderedBin) : np(), ep()
             }
         }
 
-        // ghost cells generation
-        int ghostElemInd = ep.elCount;
-        int ghostNodeInd = np.nodeCount;
-        int ghostEdgeInd = edgp.edgeCount;
-        std::vector<Node> ghostNodes;           // фантомные узлы
-        std::vector<Element> ghostElements;        // фантомные ячейки
-        std::vector<Edge> ghostEdges;         // фантомные ребра
-        for(const auto& elem: ep.elements){
-            // определяем граничный элемент
-            if(elem.is_boundary){
-                // определяем граничное ребро
-                for(const auto& edgeInd: elem.edgeIndexes){
-                    Edge edge = edgp.edges[edgeInd];
-                    if(edge.neighbourInd2 == -1){
-                        // отражаем 3й узел
-                        const auto nodeInElemInd = std::find(elem.nodeIndexes.begin(), elem.nodeIndexes.end(),
-                                                             edge.nodeInd1);
-                        int node_before_ind =
-                                nodeInElemInd == elem.nodeIndexes.begin() ? elem.nodeIndexes[elem.dim - 1] : *(
-                                        nodeInElemInd - 1);
-                        Node node1st = np.getNode(edge.nodeInd1);
-                        Node node2nd = np.getNode(edge.nodeInd2);
-                        Node node3rd = np.getNode(node_before_ind);
-                        std::vector<double> reflPoint = reflectNodeOverVector(node3rd, node1st, node2nd);
-                        Node reflNode(ghostNodeInd, reflPoint[0], reflPoint[1], 0.0);
-                        reflNode.is_ghost = true;
+        if(generateGhosts) {
+            // ghost cells generation
+            int ghostElemInd = ep.elCount;
+            int ghostNodeInd = np.nodeCount;
+            int ghostEdgeInd = edgp.edgeCount;
+            std::vector<Node> ghostNodes;           // фантомные узлы
+            std::vector<Element> ghostElements;        // фантомные ячейки
+            std::vector<Edge> ghostEdges;         // фантомные ребра
+            for (const auto &elem: ep.elements) {
+                // определяем граничный элемент
+                if (elem.is_boundary) {
+                    // определяем граничное ребро
+                    for (const auto &edgeInd: elem.edgeIndexes) {
+                        Edge edge = edgp.edges[edgeInd];
+                        if (edge.neighbourInd2 == -1) {
+                            // отражаем 3й узел
+                            const auto nodeInElemInd = std::find(elem.nodeIndexes.begin(), elem.nodeIndexes.end(),
+                                                                 edge.nodeInd1);
+                            int node_before_ind =
+                                    nodeInElemInd == elem.nodeIndexes.begin() ? elem.nodeIndexes[elem.dim - 1] : *(
+                                            nodeInElemInd - 1);
+                            Node node1st = np.getNode(edge.nodeInd1);
+                            Node node2nd = np.getNode(edge.nodeInd2);
+                            Node node3rd = np.getNode(node_before_ind);
+                            std::vector<double> reflPoint = reflectNodeOverVector(node3rd, node1st, node2nd);
+                            Node reflNode(ghostNodeInd, reflPoint[0], reflPoint[1], 0.0);
+                            reflNode.is_ghost = true;
 
-                        // строим элемент
-                        bool isNotCounter = false;
-                        std::vector<int> ghostElNodes{node2nd.ind, node1st.ind, ghostNodeInd};
-                        std::vector<Node> ghostElNodesnodes{node2nd, node1st, reflNode};
-                        if(!isCounterClockwise(ghostElNodesnodes)){
-                            std::swap(ghostElNodes[0], ghostElNodes[1]);
-                            std::swap(ghostElNodesnodes[0], ghostElNodesnodes[1]);
-                            isNotCounter = true;
-                            if(!isCounterClockwise(ghostElNodesnodes)){
-                                std::cout << "Again!" << std::endl;
+                            // строим элемент
+                            bool isNotCounter = false;
+                            std::vector<int> ghostElNodes{node2nd.ind, node1st.ind, ghostNodeInd};
+                            std::vector<Node> ghostElNodesnodes{node2nd, node1st, reflNode};
+                            if (!isCounterClockwise(ghostElNodesnodes)) {
+                                std::swap(ghostElNodes[0], ghostElNodes[1]);
+                                std::swap(ghostElNodesnodes[0], ghostElNodesnodes[1]);
+                                isNotCounter = true;
+                                if (!isCounterClockwise(ghostElNodesnodes)) {
+                                    std::cout << "Again!" << std::endl;
+                                }
                             }
+                            Element ghostEl(ghostElemInd, ghostElNodes, 3);
+                            ghostEl.is_ghost = true;
+
+                            // строим рёбра
+                            Edge ghostEdge1(ghostEdgeInd, edge.nodeInd1, ghostNodeInd, ghostElemInd, -1,
+                                            getDistance(node1st, reflNode),
+                                            calculateNormalVector2D(node1st, reflNode),
+                                            getMidPoint2D(node1st, reflNode));
+                            if (std::abs(1.0 - std::sqrt(ghostEdge1.normalVector[0] * ghostEdge1.normalVector[0] +
+                                                         ghostEdge1.normalVector[1] * ghostEdge1.normalVector[1])) >
+                                1e-15) {
+                                std::cout << "bad normal while creating a ghost edge! normal = { "
+                                          << ghostEdge1.normalVector[0] << " , " << ghostEdge1.normalVector[1] << " }"
+                                          << std::endl;
+                            }
+
+                            ghostEdge1.is_ghost = true;
+                            Edge ghostEdge2(ghostEdgeInd + 1, ghostNodeInd, edge.nodeInd2, ghostElemInd, -1,
+                                            getDistance(reflNode, node2nd),
+                                            calculateNormalVector2D(reflNode, node2nd),
+                                            getMidPoint2D(reflNode, node2nd));
+                            if (std::abs(1.0 - std::sqrt(ghostEdge2.normalVector[0] * ghostEdge2.normalVector[0] +
+                                                         ghostEdge2.normalVector[1] * ghostEdge2.normalVector[1])) >
+                                1e-15) {
+                                std::cout << "bad normal while creating a ghost edge!" << std::endl;
+                            }
+
+                            ghostEdge2.is_ghost = true;
+                            ghostEl.edgeIndexes = std::vector<int>{edge.ind, ghostEdgeInd, ghostEdgeInd + 1};
+                            if (isNotCounter) {
+                                ghostEl.edgeIndexes = std::vector<int>{edge.ind, ghostEdgeInd + 1, ghostEdgeInd};
+                            }
+                            ghostEl.area = elem.area;
+                            ghostEl.centroid2D = getElementCentroid2D(ghostElNodesnodes);
+
+                            // neighbour service connection
+                            ns.boundaryToGhostElements[elem.ind] = ghostEl.ind;
+
+                            // Update indices
+                            ghostNodes.push_back(reflNode);
+                            ghostElements.push_back(ghostEl);
+                            ghostEdges.push_back(ghostEdge1);
+                            ghostEdges.push_back(ghostEdge2);
+                            ++ghostElemInd;
+                            ++ghostElemCount;
+                            ++ghostNodeInd;
+                            ++ghostNodeCount;
+                            ghostEdgeInd += 2;
                         }
-                        Element ghostEl(ghostElemInd, ghostElNodes, 3);
-                        ghostEl.is_ghost = true;
-
-                        // строим рёбра
-                        Edge ghostEdge1(ghostEdgeInd, edge.nodeInd1, ghostNodeInd, ghostElemInd, -1,
-                                        getDistance(node1st, reflNode),
-                                        calculateNormalVector2D(node1st, reflNode),
-                                        getMidPoint2D(node1st, reflNode));
-                        if(std::abs(1.0-std::sqrt(ghostEdge1.normalVector[0]*ghostEdge1.normalVector[0] + ghostEdge1.normalVector[1]*ghostEdge1.normalVector[1])) > 1e-15){
-                            std::cout << "bad normal while creating a ghost edge! normal = { " << ghostEdge1.normalVector[0] << " , " << ghostEdge1.normalVector[1] << " }"<<std::endl;
-                        }
-
-                        ghostEdge1.is_ghost = true;
-                        Edge ghostEdge2(ghostEdgeInd + 1, ghostNodeInd, edge.nodeInd2, ghostElemInd, -1,
-                                        getDistance(reflNode, node2nd),
-                                        calculateNormalVector2D(reflNode, node2nd),
-                                        getMidPoint2D(reflNode, node2nd));
-                        if(std::abs(1.0-std::sqrt(ghostEdge2.normalVector[0]*ghostEdge2.normalVector[0] + ghostEdge2.normalVector[1]*ghostEdge2.normalVector[1])) > 1e-15){
-                            std::cout << "bad normal while creating a ghost edge!" <<std::endl;
-                        }
-
-                        ghostEdge2.is_ghost = true;
-                        ghostEl.edgeIndexes = std::vector<int>{edge.ind, ghostEdgeInd, ghostEdgeInd + 1};
-                        if(isNotCounter){
-                            ghostEl.edgeIndexes = std::vector<int>{edge.ind, ghostEdgeInd + 1, ghostEdgeInd};
-                        }
-                        ghostEl.area = elem.area;
-                        ghostEl.centroid2D = getElementCentroid2D(ghostElNodesnodes);
-
-                        // neighbour service connection
-                        ns.boundaryToGhostElements[elem.ind] = ghostEl.ind;
-
-                        // Update indices
-                        ghostNodes.push_back(reflNode);
-                        ghostElements.push_back(ghostEl);
-                        ghostEdges.push_back(ghostEdge1);
-                        ghostEdges.push_back(ghostEdge2);
-                        ++ghostElemInd;
-                        ++ghostElemCount;
-                        ++ghostNodeInd;
-                        ++ghostNodeCount;
-                        ghostEdgeInd += 2;
                     }
+
                 }
-
             }
+
+            // Append ghost nodes, elements, and edges to pools
+            np.nodes.insert(np.nodes.end(), ghostNodes.begin(), ghostNodes.end());
+            np.nodeCount = np.nodes.size();
+            ep.elements.insert(ep.elements.end(), ghostElements.begin(), ghostElements.end());
+            ep.elCount = ep.elements.size();
+            edgp.edges.insert(edgp.edges.end(), ghostEdges.begin(), ghostEdges.end());
+            edgp.edgeCount = edgp.edges.size();
         }
-
-        // Append ghost nodes, elements, and edges to pools
-        np.nodes.insert(np.nodes.end(), ghostNodes.begin(), ghostNodes.end());
-        np.nodeCount = np.nodes.size();
-        ep.elements.insert(ep.elements.end(), ghostElements.begin(), ghostElements.end());
-        ep.elCount = ep.elements.size();
-        edgp.edges.insert(edgp.edges.end(), ghostEdges.begin(), ghostEdges.end());
-        edgp.edgeCount = edgp.edges.size();
-
 
         // Обновлениеmap узел -> соседи-рёбра
         ns.nodeToEdgesMap.clear();
@@ -968,6 +975,27 @@ void World::exportToFile(const string &filename) const{
     }
 
     // Export boundaries
+    // Добавить запись граничных узлов
+    const auto writeVector = [&](const std::vector<int>& vec) {
+        size_t size = vec.size();
+        file.write(reinterpret_cast<const char*>(&size), sizeof(size));
+        for (const auto& el : vec) {
+            file.write(reinterpret_cast<const char*>(&el), sizeof(el));
+        }
+    };
+
+    writeVector(boundaryLeftNodes);
+    writeVector(boundaryRightNodes);
+    writeVector(boundaryTopNodes);
+    writeVector(boundaryBottomNodes);
+
+    // запись углов
+    file.write(reinterpret_cast<const char*>(&minX), sizeof(minX));
+    file.write(reinterpret_cast<const char*>(&maxX), sizeof(maxX));
+    file.write(reinterpret_cast<const char*>(&minY), sizeof(minY));
+    file.write(reinterpret_cast<const char*>(&maxY), sizeof(maxY));
+    std::cout << "Corners: minX = " << minX << " , maxX = " << maxX << " , minY = " << minY << " , maxY = " << maxY << std::endl;
+
     int boundaryNodeLeftToRight_size =  ns.boundaryNodeLeftToRight.size();
     file.write(reinterpret_cast<const char*>(&boundaryNodeLeftToRight_size), sizeof(boundaryNodeLeftToRight_size));
     for (const auto& [nodeLeft, nodeRight] : ns.boundaryNodeLeftToRight) {
@@ -1015,7 +1043,11 @@ void World::exportToFile(const string &filename) const{
         file.write(reinterpret_cast<const char*>(&ghost), sizeof(ghost));
     }
 
+    file.write(reinterpret_cast<const char*>(&generateGhosts), sizeof(generateGhosts));
     // Count of ghost elems and nodes (X_x)
+    file.write(reinterpret_cast<const char*>(&ghostElemCount), sizeof(ghostElemCount));
+    file.write(reinterpret_cast<const char*>(&ghostNodeCount), sizeof(ghostNodeCount));
+
     file.write(reinterpret_cast<const char*>(&ghostElemCount), sizeof(ghostElemCount));
     file.write(reinterpret_cast<const char*>(&ghostNodeCount), sizeof(ghostNodeCount));
 
@@ -1164,6 +1196,30 @@ void World::importFromFile(const string &filename) {
     }
 
     // Import boundaries
+    const auto readVector = [&](std::vector<int>& vec) {
+        size_t size;
+        file.read(reinterpret_cast<char*>(&size), sizeof(size));
+        vec.resize(size);
+        for(int i = 0; i < size; ++i){
+            int el;
+            file.read(reinterpret_cast<char*>(&el), sizeof(el));
+            vec[i] = el;
+        }
+
+    };
+
+    readVector(boundaryLeftNodes);
+    readVector(boundaryRightNodes);
+    readVector(boundaryTopNodes);
+    readVector(boundaryBottomNodes);
+
+    // чтение границ
+    file.read(reinterpret_cast<char*>(&minX), sizeof(minX));
+    file.read(reinterpret_cast<char*>(&maxX), sizeof(maxX));
+    file.read(reinterpret_cast<char*>(&minY), sizeof(minY));
+    file.read(reinterpret_cast<char*>(&maxY), sizeof(maxY));
+    std::cout << "Corners: minX = " << minX << " , maxX = " << maxX << " , minY = " << minY << " , maxY = " << maxY << std::endl;
+
     int boundaryNodeLeftToRight_size;
     file.read(reinterpret_cast<char*>(&boundaryNodeLeftToRight_size), sizeof(boundaryNodeLeftToRight_size));
     ns.boundaryNodeLeftToRight.clear();
@@ -1226,6 +1282,8 @@ void World::importFromFile(const string &filename) {
         file.read(reinterpret_cast<char*>(&ElemBot), sizeof(ElemBot));
         ns.boundaryElemTopToBottom[ElemTop] = ElemBot;
     }
+
+    file.read(reinterpret_cast<char*>(&generateGhosts), sizeof(generateGhosts));
 
     int boundaryToGhost_size;
     file.read(reinterpret_cast<char*>(&boundaryToGhost_size), sizeof(boundaryToGhost_size));
